@@ -4,16 +4,8 @@ import { Sidebar } from './components/Sidebar';
 import { StatCard } from './components/StatCard';
 import { DiscoveryTable } from './components/DiscoveryTable';
 import { ComparisonModal } from './components/ComparisonModal';
+import { generateCosmicData } from './utils/mockDataGenerator';
 import type { CelestialBody, FusionResponse } from './types';
-
-// --- MOCK DATA ---
-const DISCOVERY_DATA: CelestialBody[] = [
-  { name: "Sun", type: "G2V Star", temp: "5,778 K", location: "Solar System", size_rel: 109, description: "The heart of our solar system." },
-  { name: "Sirius A", type: "A1V Star", temp: "9,940 K", location: "Canis Major", size_rel: 1.7, description: "The brightest star in the night sky." },
-  { name: "Betelgeuse", type: "Red Supergiant", temp: "3,500 K", location: "Orion", size_rel: 764, description: "A massive star nearing the end of its life." },
-  { name: "VY Canis Majoris", type: "Hypergiant", temp: "3,490 K", location: "Canis Major", size_rel: 1420, description: "One of the largest known stars." },
-  { name: "Earth", type: "Terrestrial", temp: "288 K", location: "Solar System", size_rel: 1, description: "Our home planet." },
-];
 
 export default function App() {
   const [query, setQuery] = useState('');
@@ -23,9 +15,15 @@ export default function App() {
   const [selectedBody, setSelectedBody] = useState<CelestialBody | null>(null);
   const [error, setError] = useState('');
 
+  // 1. GENERATE VAST DATA (200 items)
+  // useMemo ensures this only runs once when the app loads, not on every click.
+  const vastData = useMemo(() => generateCosmicData(200), []);
+
+  // 2. FILTER LOGIC
+  // Filters the vast list based on your search query
   const suggestions = useMemo(() => 
-    DISCOVERY_DATA.filter(b => b.name.toLowerCase().includes(query.toLowerCase()) && query.length > 1), 
-  [query]);
+    vastData.filter(b => b.name.toLowerCase().includes(query.toLowerCase()) && query.length > 1), 
+  [query, vastData]);
 
   const handleSearch = async (overrideQuery?: string) => {
     const searchTerm = overrideQuery || query;
@@ -102,7 +100,7 @@ export default function App() {
               {/* Autocomplete Suggestions */}
               {suggestions.length > 0 && (
                 <div className={`absolute top-full left-0 right-0 mt-2 rounded-xl border z-50 p-2 shadow-2xl backdrop-blur-xl ${isDarkMode ? 'bg-slate-900/90 border-slate-700' : 'bg-white/90 border-slate-200'}`}>
-                  {suggestions.map(s => (
+                  {suggestions.slice(0, 6).map(s => (
                     <button 
                       key={s.name}
                       onClick={() => { setQuery(s.name); handleSearch(s.name); }}
@@ -121,7 +119,7 @@ export default function App() {
         {/* Discovery Table (Only shows when no search result) */}
         {!data && (
           <DiscoveryTable 
-            data={DISCOVERY_DATA} 
+            data={vastData} // PASSING THE VAST GENERATED DATA HERE
             isDarkMode={isDarkMode} 
             onSelect={setSelectedBody} 
           />
@@ -146,7 +144,7 @@ export default function App() {
         )}
       </main>
 
-      {/* COMPARISON MODAL */}
+      {/* COMPARISON MODAL - NOW WITH 3D */}
       {selectedBody && (
         <ComparisonModal 
           body={selectedBody} 

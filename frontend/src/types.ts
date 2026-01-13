@@ -1,9 +1,13 @@
 export interface CelestialBody {
+  id: string; // Added ID for keys
   name: string;
   type: string;
   temp: string;
+  color: string; // Hex color for the 3D model
   location: string;
-  size_rel: number; // Relative to Earth (1)
+  distance: string; // Light years
+  mass: string; // Solar masses
+  size_rel: number; // Relative to Earth (1) or Sun (1) depending on context
   description: string;
 }
 
