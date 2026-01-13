@@ -1,38 +1,35 @@
 import numpy as np
-from astropy import units as u
 from astropy.coordinates import SkyCoord
 from astroquery.simbad import Simbad
 from astroquery.mast import Observations
+import astropy.units as u
 
 class CosmicFusionEngine:
     def search_object(self, object_name):
-        print(f"--- 1. Searching SIMBAD for: {object_name} ---")
+        print(f"--- 1. Resolving Object: {object_name} ---")
         
         try:
-            # DIRECT QUERY (No configuration to avoid attribute errors)
-            result_table = Simbad.query_object(object_name)
+            # Step A: Resolve Name to Coordinates (using Astropy Internal Resolver)
+            coord = SkyCoord.from_name(object_name)
             
-            # CASE A: Object Not Found
-            if result_table is None:
-                return {"error": f"Object '{object_name}' not found."}
-            
-            # CASE B: Success - Parse Data
-            # Simbad returns a table. We get the first row.
-            # Default columns are usually 'RA' and 'DEC' in string format (e.g. "00 42 44")
-            ra_raw = str(result_table['RA'][0]) 
-            dec_raw = str(result_table['DEC'][0])
-            official_name = str(result_table['MAIN_ID'][0])
-            
-            print(f"SIMBAD Success: {official_name} at {ra_raw}, {dec_raw}")
+            ra = coord.ra.degree
+            dec = coord.dec.degree
+            print(f"Target Acquired: RA={ra}, DEC={dec}")
 
-            # Convert coordinates safely
-            coord = SkyCoord(f"{ra_raw} {dec_raw}", unit=(u.hourangle, u.deg))
-            
+            # Step B: Get Official Name (Optional - keeps working even if this fails)
+            official_name = object_name
+            try:
+                simbad_table = Simbad.query_object(object_name)
+                if simbad_table is not None and 'MAIN_ID' in simbad_table.colnames:
+                    official_name = str(simbad_table['MAIN_ID'][0])
+            except Exception:
+                pass
+
             return {
                 "name": official_name,
                 "coordinates": {
-                    "ra": float(coord.ra.degree),
-                    "dec": float(coord.dec.degree),
+                    "ra": round(float(ra), 6),
+                    "dec": round(float(dec), 6),
                     "frame": "ICRS"
                 },
                 "external_links": {
@@ -41,28 +38,35 @@ class CosmicFusionEngine:
             }
 
         except Exception as e:
-            print(f"SIMBAD FAILED: {e}")
-            print("--- ACTIVATING FALLBACK MODE (So you can see the UI) ---")
-            # This ensures your frontend doesn't break while we debug the library
+            print(f"COORDINATE LOOKUP FAILED: {e}")
             return self.get_mock_data(object_name)
 
     def fetch_mission_data(self, ra, dec):
-        print(f"--- 2. Searching MAST Missions ---")
+        print(f"--- 2. Searching MAST Missions for Coords: {ra:.4f}, {dec:.4f} ---")
         try:
-            # Query MAST
-            obs_table = Observations.query_region(f"{ra} {dec} deg", radius="0.02 deg")
+            # FIX: Create a SkyCoord object explicitly.
+            # This tells MAST "These are definitely numbers", preventing the "Name Not Found" error.
+            target_coord = SkyCoord(ra, dec, unit=(u.deg, u.deg), frame='icrs')
+
+            # Query MAST using the coordinate object
+            obs_table = Observations.query_region(target_coord, radius="0.02 deg")
             
             if obs_table is None or len(obs_table) == 0:
+                print("MAST: No datasets found.")
                 return []
 
             clean_list = []
-            # Limit to 10 results
-            for row in obs_table[:10]:
-                # Handle potential masking in the wavelength column
+            # Limit to 15 results
+            for row in obs_table[:15]:
+                # Safe wavelength extraction
                 wave_min = row['em_min']
                 wave_str = "N/A"
-                if not np.ma.is_masked(wave_min):
-                     wave_str = f"{wave_min:.2f}"
+                if not np.ma.is_masked(wave_min) and wave_min is not None:
+                     try:
+                         # Convert to string, assuming nanometers if reasonable, or keep raw
+                         wave_str = f"{float(wave_min):.2f} nm"
+                     except:
+                         wave_str = str(wave_min)
 
                 clean_list.append({
                     "mission": str(row['obs_collection']),
@@ -73,22 +77,12 @@ class CosmicFusionEngine:
             return clean_list
 
         except Exception as e:
-            print(f"MAST ERROR: {e}")
-            return [] # Return empty list so the page still loads
+            print(f"MAST SERVICE ERROR: {e}")
+            return []
 
     def get_mock_data(self, name):
-        """
-        Returns fake data if the real libraries crash. 
-        This is useful for debugging the Frontend UI.
-        """
         return {
-            "name": f"{name} (MOCK DATA - BACKEND FAILED)",
-            "coordinates": {
-                "ra": 10.68,
-                "dec": 41.26,
-                "frame": "ICRS"
-            },
-            "external_links": {
-                "simbad": "#"
-            }
+            "name": f"{name} (OFFLINE/NOT FOUND)",
+            "coordinates": { "ra": 0.0, "dec": 0.0, "frame": "ERROR" },
+            "external_links": { "simbad": "#" }
         }
