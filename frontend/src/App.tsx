@@ -1,10 +1,11 @@
 import { useState, useMemo } from 'react';
-import { Search, Sun, Moon, ChevronRight, BarChart3, Database } from 'lucide-react';
+import { Search, Sun, Moon, ChevronRight } from 'lucide-react';
 import { Sidebar } from './components/Sidebar';
 import { DiscoveryTable } from './components/DiscoveryTable';
 import { ComparisonModal } from './components/ComparisonModal';
 import { AnalyticsView } from './components/AnalyticsView';
-import { SkyMapView } from './components/SkyMapView'; // ✅ Imported the new component
+import { SkyMapView } from './components/SkyMapView';
+import { RepositoryView } from './components/RepositoryView'; // ✅ New Import
 import { generateCosmicData } from './utils/mockDataGenerator';
 import type { CelestialBody, FusionResponse } from './types';
 
@@ -23,7 +24,7 @@ export default function App() {
   // 1. GENERATE VAST DATA (200 items)
   const vastData = useMemo(() => generateCosmicData(200), []);
 
-  // 2. FILTER LOGIC
+  // 2. FILTER LOGIC for Search bar
   const suggestions = useMemo(() => 
     vastData.filter(b => b.name.toLowerCase().includes(query.toLowerCase()) && query.length > 1), 
   [query, vastData]);
@@ -35,12 +36,13 @@ export default function App() {
     setError('');
     
     try {
+      // Attempting to hit local FastAPI/Node backend if it's running
       const response = await fetch(`http://localhost:8000/search/${searchTerm}`);
       const result = await response.json();
       if (result.error) setError(result.error);
       else setData(result);
     } catch (err) {
-      console.warn("Backend unavailable, using fallback.");
+      console.warn("Backend unavailable, using fallback mock data.");
       setData({
         overview: { name: searchTerm, coordinates: { ra: 12.34, dec: -5.67, frame: "ICRS" }, external_links: { simbad: "#" } },
         available_datasets: [{ mission: "Hubble", instrument: "WFC3", wavelength: "Visible" }]
@@ -53,13 +55,13 @@ export default function App() {
   return (
     <div className={`min-h-screen transition-colors duration-500 ${isDarkMode ? 'bg-[#0B0C10] text-white' : 'bg-slate-50 text-slate-900'}`}>
       
-      {/* Dynamic Background */}
+      {/* Dynamic Background Gradients */}
       <div className="fixed inset-0 z-0 overflow-hidden pointer-events-none">
         <div className={`absolute top-[-20%] left-[-10%] w-[50%] h-[50%] rounded-full blur-[120px] mix-blend-screen animate-pulse ${isDarkMode ? 'bg-blue-600/20' : 'bg-blue-200/40'}`} />
         <div className={`absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] rounded-full blur-[120px] mix-blend-screen animate-pulse delay-1000 ${isDarkMode ? 'bg-purple-600/20' : 'bg-purple-200/40'}`} />
       </div>
 
-      {/* SIDEBAR with Navigation triggers */}
+      {/* Navigation Sidebar */}
       <Sidebar activeView={currentView} onViewChange={setCurrentView} />
 
       <main className="ml-20 md:ml-64 p-8 relative z-10">
@@ -86,9 +88,9 @@ export default function App() {
 
         {/* --- VIEW SWITCHER --- */}
         
+        {/* 1. DISCOVERY VIEW (Search & Table) */}
         {currentView === 'discovery' && (
           <div className="animate-fade-in">
-            {/* Search Section */}
             <div className="max-w-4xl mx-auto mb-16 text-center">
               {error && (
                 <div className="mb-6 p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-sm animate-fade-in">
@@ -103,7 +105,7 @@ export default function App() {
               )}
 
               <div className="relative max-w-2xl mx-auto group">
-                <div className={`absolute -inset-1 bg-gradient-to-r from-cyan-500 to-purple-600 rounded-2xl blur opacity-25 group-hover:opacity-50 transition duration-1000`}></div>
+                <div className="absolute -inset-1 bg-gradient-to-r from-cyan-500 to-purple-600 rounded-2xl blur opacity-25 group-hover:opacity-50 transition duration-1000"></div>
                 <div className={`relative flex rounded-2xl border shadow-2xl overflow-hidden ${isDarkMode ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-200'}`}>
                   <input 
                     type="text" 
@@ -141,52 +143,29 @@ export default function App() {
           </div>
         )}
 
+        {/* 2. ANALYTICS VIEW (Charts & Graphs) */}
         {currentView === 'analytics' && (
           <AnalyticsView data={vastData} />
         )}
 
+        {/* 3. SKY MAP VIEW (2D Projections) */}
         {currentView === 'skymap' && (
-          // ✅ REPLACED PLACEHOLDER WITH REAL COMPONENT
           <SkyMapView 
             data={vastData} 
             onSelect={setSelectedBody} 
           />
         )}
 
+        {/* 4. REPOSITORY VIEW (Schema Mapping & Export) */}
         {currentView === 'repository' && (
-          <div className="space-y-6 animate-fade-in">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="p-8 rounded-3xl bg-gradient-to-br from-cyan-500/10 to-transparent border border-cyan-500/20">
-                <Database className="text-cyan-400 mb-4" size={32} />
-                <h3 className="text-xl font-bold mb-2">Export Fused Catalog</h3>
-                <p className="text-slate-500 text-sm mb-6">Download the current session's cross-matched data in standardized VO-Table or CSV format.</p>
-                <button className="w-full py-4 bg-cyan-600 hover:bg-cyan-500 rounded-xl font-bold transition-all flex items-center justify-center gap-2">
-                   Download .CSV ({vastData.length} Rows)
-                </button>
-              </div>
-              <div className="p-8 rounded-3xl bg-gradient-to-br from-purple-500/10 to-transparent border border-purple-500/20">
-                <BarChart3 className="text-purple-400 mb-4" size={32} />
-                <h3 className="text-xl font-bold mb-2">Schema Provenance</h3>
-                <p className="text-slate-500 text-sm mb-6">Review how the data fields from NASA (MAST) and ESA (Gaia) were mapped to the unified schema.</p>
-                <button className="w-full py-4 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl font-bold transition-all">
-                   View Mapping Logic
-                </button>
-              </div>
-            </div>
-            
-            {/* A "Status" Log for the Abstract feeling */}
-            <div className={`p-6 rounded-2xl border font-mono text-xs space-y-2 ${isDarkMode ? 'bg-black/40 border-white/5 text-emerald-500/80' : 'bg-slate-100 border-slate-200 text-emerald-700'}`}>
-              <p>[INFO] Initializing Cross-Match engine...</p>
-              <p>[SUCCESS] 200/200 Sources harmonized using J2000 coordinate frame.</p>
-              <p>[INFO] Applying barycentric corrections...</p>
-              <p>[READY] Repository sync complete.</p>
-            </div>
-          </div>
+          <RepositoryView 
+            data={vastData} 
+          />
         )}
 
       </main>
 
-      {/* COMPARISON MODAL - Now triggered by clicking anything in any view */}
+      {/* GLOBAL MODAL - For detailed body comparison */}
       {selectedBody && (
         <ComparisonModal 
           body={selectedBody} 
