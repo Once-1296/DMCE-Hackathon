@@ -1,17 +1,19 @@
-import { Table, Map, BarChart3, Database, Layers, Settings as SettingsIcon } from 'lucide-react';
+import { Table, Map, BarChart3, Database, Layers, Upload, Settings as SettingsIcon } from 'lucide-react';
 
 interface SidebarProps {
-  activeView: 'discovery' | 'skymap' | 'analytics' | 'repository';
-  onViewChange: (view: 'discovery' | 'skymap' | 'analytics' | 'repository') => void;
+  // Add 'ai' and 'ingestion' to this list
+  activeView: 'discovery' | 'skymap' | 'analytics' | 'repository' | 'ingestion' | 'ai';
+  onViewChange: (view: any) => void;
 }
 
 export const Sidebar = ({ activeView, onViewChange }: SidebarProps) => {
   const menuItems = [
-    { id: 'discovery', icon: Table, label: 'Discovery' },
-    { id: 'skymap', icon: Map, label: 'Sky Map' },
-    { id: 'analytics', icon: BarChart3, label: 'Analytics' },
-    { id: 'repository', icon: Database, label: 'Repository' },
-  ];
+  { id: 'ingestion', icon: Upload, label: 'Ingest Data' }, // NEW ITEM
+  { id: 'discovery', icon: Table, label: 'Discovery' },
+  { id: 'skymap', icon: Map, label: 'Sky Map' },
+  { id: 'analytics', icon: BarChart3, label: 'Analytics' },
+  { id: 'repository', icon: Database, label: 'Repository' },
+];
 
   return (
     <aside className="fixed left-0 top-0 h-full w-20 md:w-64 bg-[#0B0C10]/80 backdrop-blur-xl border-r border-white/10 z-50 transition-all duration-300">

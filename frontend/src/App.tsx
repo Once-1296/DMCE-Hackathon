@@ -5,12 +5,15 @@ import { DiscoveryTable } from './components/DiscoveryTable';
 import { ComparisonModal } from './components/ComparisonModal';
 import { AnalyticsView } from './components/AnalyticsView';
 import { SkyMapView } from './components/SkyMapView';
-import { RepositoryView } from './components/RepositoryView'; // ✅ New Import
+import { RepositoryView } from './components/RepositoryView';
+import { IngestionEngine } from './components/IngestionEngine';
+import { AIInsights } from './components/AIInsights';
+import { MissionControl } from './components/MissionControl'; // Ensure you created this component
 import { generateCosmicData } from './utils/mockDataGenerator';
 import type { CelestialBody, FusionResponse } from './types';
 
-// Define the valid view states
-type View = 'discovery' | 'skymap' | 'analytics' | 'repository';
+// ✅ DEFINITION: Includes all 6 view states
+export type View = 'discovery' | 'skymap' | 'analytics' | 'repository' | 'ingestion' | 'ai';
 
 export default function App() {
   const [currentView, setCurrentView] = useState<View>('discovery');
@@ -36,7 +39,6 @@ export default function App() {
     setError('');
     
     try {
-      // Attempting to hit local FastAPI/Node backend if it's running
       const response = await fetch(`http://localhost:8000/search/${searchTerm}`);
       const result = await response.json();
       if (result.error) setError(result.error);
@@ -62,10 +64,11 @@ export default function App() {
       </div>
 
       {/* Navigation Sidebar */}
+      {/* ⚠️ NOTE: You must update Sidebar.tsx types to accept 'ai' view */}
       <Sidebar activeView={currentView} onViewChange={setCurrentView} />
 
       <main className="ml-20 md:ml-64 p-8 relative z-10">
-        <header className="flex justify-between items-center mb-12">
+        <header className="flex justify-between items-center mb-8">
           <div>
             <div className="flex items-center gap-3">
               <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 to-purple-500">COSMIC Data Fusion</h1>
@@ -76,6 +79,8 @@ export default function App() {
               {currentView === 'analytics' && "Cross-Mission Statistical Analysis"}
               {currentView === 'skymap' && "Spatial Coordinate Projection"}
               {currentView === 'repository' && "Fused Dataset Archive & Provenance"}
+              {currentView === 'ingestion' && "Raw Data Intake & Harmonization Pipeline"}
+              {currentView === 'ai' && "Predictive Anomaly Detection Engine"}
             </p>
           </div>
           <button 
@@ -86,16 +91,28 @@ export default function App() {
           </button>
         </header>
 
+        {/* --- CLOUD ENABLED DASHBOARD (Mission Control) --- */}
+        {/* Only show on Dashboard or Repository views to reduce clutter, or always show if preferred */}
+        {['repository', 'ingestion'].includes(currentView) && (
+           <div className="mb-8">
+             <MissionControl isDarkMode={isDarkMode} />
+           </div>
+        )}
+
         {/* --- VIEW SWITCHER --- */}
+
+        {currentView === 'ingestion' && <IngestionEngine />}
+
+        {currentView === 'ai' && (
+          // ⚠️ NOTE: You must update AIInsights.tsx to accept 'isDarkMode' prop
+          <AIInsights data={vastData} isDarkMode={isDarkMode} />
+        )}
         
-        {/* 1. DISCOVERY VIEW (Search & Table) */}
         {currentView === 'discovery' && (
           <div className="animate-fade-in">
             <div className="max-w-4xl mx-auto mb-16 text-center">
               {error && (
-                <div className="mb-6 p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-sm animate-fade-in">
-                  {error}
-                </div>
+                <div className="mb-6 p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-sm animate-fade-in">{error}</div>
               )}
               {!data && !loading && (
                 <div className="mb-10 animate-fade-in">
@@ -143,29 +160,15 @@ export default function App() {
           </div>
         )}
 
-        {/* 2. ANALYTICS VIEW (Charts & Graphs) */}
-        {currentView === 'analytics' && (
-          <AnalyticsView data={vastData} />
-        )}
+        {currentView === 'analytics' && <AnalyticsView data={vastData} isDarkMode={isDarkMode} />}
 
-        {/* 3. SKY MAP VIEW (2D Projections) */}
-        {currentView === 'skymap' && (
-          <SkyMapView 
-            data={vastData} 
-            onSelect={setSelectedBody} 
-          />
-        )}
+        {currentView === 'skymap' && <SkyMapView data={vastData} onSelect={setSelectedBody} />}
 
-        {/* 4. REPOSITORY VIEW (Schema Mapping & Export) */}
-        {currentView === 'repository' && (
-          <RepositoryView 
-            data={vastData} 
-          />
-        )}
+        {currentView === 'repository' && <RepositoryView data={vastData} isDarkMode={isDarkMode} />}
 
       </main>
 
-      {/* GLOBAL MODAL - For detailed body comparison */}
+      {/* GLOBAL MODAL */}
       {selectedBody && (
         <ComparisonModal 
           body={selectedBody} 
