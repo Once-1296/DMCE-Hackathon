@@ -24,19 +24,32 @@ export const generateCosmicData = (count: number): CelestialBody[] => {
     const temp = Math.floor(rand(spectral.minTemp, spectral.maxTemp));
     // Hotter stars are usually bigger and massive (simplified relation)
     const mass = parseFloat(rand(0.1, 50).toFixed(2)); 
-    const size = parseFloat((mass * rand(0.8, 1.2)).toFixed(2)); // Rough correlation for demo
+    const size = parseFloat((mass * rand(0.8, 1.2)).toFixed(2)); 
     
+    // --- NEW LOGIC: Conflict Generation ---
+    // 30% chance this star has conflicting data from different telescopes
+    const hasConflict = Math.random() > 0.7;
+
     return {
       id: `COS-${10000 + i}`,
       name: `${pick(GREEK_LETTERS)} ${pick(CONSTELLATIONS)}`,
-      type: `${spectral.type}-Type ${spectral.desc.split(' ')[1]}`, // e.g. "G-Type Dwarf"
+      type: `${spectral.type}-Type ${spectral.desc.split(' ')[1]}`, 
       temp: `${temp.toLocaleString()} K`,
-      color: spectral.color, // We use this for the 3D model color
+      color: spectral.color, 
       location: `Sector ${randInt(1, 99)}-${randInt(1, 999)}`,
       distance: `${rand(4, 5000).toFixed(1)} ly`,
       mass: `${mass} M☉`,
       size_rel: size,
       description: `A distinct ${spectral.desc.toLowerCase()} located in the deep field. Spectral analysis indicates high metallicity and potential exoplanetary debris disks.`,
+      
+      // --- NEW FIELDS FOR HARMONIZER UI ---
+      has_conflict: hasConflict,
+      confidence_score: hasConflict ? rand(0.60, 0.85) : rand(0.95, 0.99), // Low confidence if conflict
+      source_weights: {
+        hubble: 33,
+        gaia: 33,
+        jwst: 34
+      }
     };
   });
 };

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { X, Activity, Eye, Flame, Zap, ScanLine } from 'lucide-react';
 import { AreaChart, Area, XAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import type { CelestialBody } from '../types';
+import { FusionHarmonizer } from './FusionHarmonizer';
 
 interface Props {
   body: CelestialBody;
@@ -77,6 +78,8 @@ export const ComparisonModal = ({ body, isDarkMode, onClose }: Props) => {
               <div className="absolute inset-0 rounded-full opacity-60 mix-blend-overlay bg-[url('https://www.transparenttextures.com/patterns/black-scales.png')]"></div>
             </div>
           </div>
+
+         
 
           {/* Scanning Effect Overlay */}
           {isScanning && (
@@ -205,6 +208,10 @@ export const ComparisonModal = ({ body, isDarkMode, onClose }: Props) => {
                 </ResponsiveContainer>
               </div>
             </div>
+
+             <div className="lg:col-span-3">
+         <FusionHarmonizer data={body} isDarkMode={isDarkMode} />
+      </div>
 
             {/* Download/Export Action */}
             <button className="w-full py-4 rounded-xl border border-dashed border-slate-600 text-slate-500 hover:border-cyan-500 hover:text-cyan-400 hover:bg-cyan-500/5 transition-all text-xs font-bold uppercase tracking-widest flex items-center justify-center gap-2">
