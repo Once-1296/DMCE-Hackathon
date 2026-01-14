@@ -1,7 +1,7 @@
-import { X, Activity } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { X, Activity, Eye, Flame, Zap, ScanLine } from 'lucide-react';
 import { AreaChart, Area, XAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import type { CelestialBody } from '../types';
-import { CelestialViewer } from './CelestialViewer'; // Import the 3D viewer
 
 interface Props {
   body: CelestialBody;
@@ -9,77 +9,172 @@ interface Props {
   onClose: () => void;
 }
 
+type Wavelength = 'optical' | 'infrared' | 'xray';
+
 export const ComparisonModal = ({ body, isDarkMode, onClose }: Props) => {
-  // Mock spectral data 
+  const [activeLayer, setActiveLayer] = useState<Wavelength>('optical');
+  const [isScanning, setIsScanning] = useState(false);
+
+  // Trigger scanning effect when switching layers
+  const handleLayerChange = (layer: Wavelength) => {
+    if (layer === activeLayer) return;
+    setIsScanning(true);
+    setActiveLayer(layer);
+    setTimeout(() => setIsScanning(false), 800);
+  };
+
+  // Mock spectral data (unchanged)
   const spectralData = [
     { wl: 300, intensity: Math.random() * 100 }, { wl: 400, intensity: Math.random() * 100 }, 
     { wl: 500, intensity: 90 }, { wl: 600, intensity: Math.random() * 80 }, 
     { wl: 700, intensity: Math.random() * 60 }
   ];
 
+  // Dynamic CSS Gradients to simulate different telescope views
+  const getVisualLayer = () => {
+    switch (activeLayer) {
+      case 'infrared': // Heatmap style (JWST)
+        return `radial-gradient(circle at 30% 30%, #facc15 0%, #ef4444 40%, #7f1d1d 80%, transparent 100%)`;
+      case 'xray': // High energy style (Chandra)
+        return `radial-gradient(circle at 50% 50%, #e0f2fe 0%, #38bdf8 20%, #3b0764 70%, transparent 100%)`;
+      case 'optical': // Standard visual (Hubble)
+      default:
+        return `radial-gradient(circle at 40% 40%, ${body.color} 0%, #000 90%, transparent 100%)`;
+    }
+  };
+
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 backdrop-blur-sm bg-black/80">
-      <div className={`w-full max-w-6xl h-[90vh] rounded-3xl border p-0 relative animate-fade-in shadow-2xl overflow-hidden flex flex-col md:flex-row ${isDarkMode ? 'bg-slate-900 border-white/10 text-white' : 'bg-white border-slate-200 text-slate-900'}`}>
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 backdrop-blur-md bg-black/90">
+      <div className={`w-full max-w-6xl h-[90vh] rounded-3xl border relative animate-fade-in shadow-2xl overflow-hidden flex flex-col md:flex-row ${isDarkMode ? 'bg-[#0f1016] border-slate-800 text-white' : 'bg-white border-slate-200 text-slate-900'}`}>
         
-        <button onClick={onClose} className="absolute top-6 right-6 z-50 p-2 bg-black/20 rounded-full hover:bg-white/10 text-white transition-colors">
+        {/* Close Button */}
+        <button onClick={onClose} className="absolute top-6 right-6 z-50 p-2 bg-black/40 backdrop-blur-md border border-white/10 rounded-full hover:bg-white/10 text-white transition-all">
           <X size={20} />
         </button>
 
-        {/* LEFT COLUMN: 3D VIEWER (Takes up 50% width on desktop) */}
-        <div className="w-full md:w-1/2 h-1/2 md:h-full bg-black relative border-r border-white/10">
-          <CelestialViewer color={body.color} size={body.size_rel} />
+        {/* --- LEFT COLUMN: MULTI-WAVELENGTH VISUALIZER --- */}
+        <div className="w-full md:w-1/2 h-1/2 md:h-full bg-black relative border-r border-white/10 overflow-hidden group">
           
-          <div className="absolute top-6 left-6 max-w-md">
-            <h2 className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white to-slate-500 mb-2">{body.name}</h2>
-            <div className="flex flex-wrap gap-2">
-               <span className="px-3 py-1 bg-white/10 backdrop-blur-md rounded-full text-xs font-bold uppercase tracking-widest border border-white/10 text-white">
+          {/* Background Starfield (Static) */}
+          <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-20"></div>
+
+          {/* THE CELESTIAL OBJECT SIMULATION */}
+          <div className="absolute inset-0 flex items-center justify-center">
+            {/* Glow Halo */}
+            <div 
+              className={`absolute w-[400px] h-[400px] rounded-full blur-[100px] transition-all duration-1000 ${
+                activeLayer === 'infrared' ? 'bg-red-900/40' : 
+                activeLayer === 'xray' ? 'bg-blue-900/40' : 'bg-white/10'
+              }`} 
+            />
+            
+            {/* The Planet/Star Sphere */}
+            <div 
+              className={`relative w-[280px] h-[280px] rounded-full transition-all duration-1000 shadow-2xl ${isScanning ? 'scale-95 blur-sm' : 'scale-100 blur-0'}`}
+              style={{ background: getVisualLayer(), boxShadow: activeLayer === 'xray' ? '0 0 50px rgba(56, 189, 248, 0.4)' : 'none' }}
+            >
+              {/* Texture Overlay */}
+              <div className="absolute inset-0 rounded-full opacity-60 mix-blend-overlay bg-[url('https://www.transparenttextures.com/patterns/black-scales.png')]"></div>
+            </div>
+          </div>
+
+          {/* Scanning Effect Overlay */}
+          {isScanning && (
+            <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/60 backdrop-blur-[2px] animate-pulse">
+              <ScanLine size={48} className="text-cyan-400 animate-bounce mb-2" />
+              <span className="text-cyan-400 font-mono text-xs tracking-widest uppercase">Calibrating Sensor Array...</span>
+            </div>
+          )}
+
+          {/* Info Overlay Top Left */}
+          <div className="absolute top-8 left-8 z-10">
+            <h2 className="text-5xl font-black text-white mb-2 tracking-tight drop-shadow-lg">{body.name}</h2>
+            <div className="flex gap-2">
+               <span className="px-3 py-1 bg-white/10 backdrop-blur-md rounded border border-white/20 text-xs font-bold text-white uppercase tracking-widest">
                 {body.type}
               </span>
-               <span className="px-3 py-1 bg-cyan-500/10 backdrop-blur-md rounded-full text-xs font-bold uppercase tracking-widest border border-cyan-500/20 text-cyan-400">
-                {body.distance}
+              <span className="px-3 py-1 bg-white/10 backdrop-blur-md rounded border border-white/20 text-xs font-bold text-cyan-400 uppercase tracking-widest flex items-center gap-2">
+                <Activity size={12} /> Live Feed
               </span>
             </div>
           </div>
+
+          {/* Wavelength Controls Bottom */}
+          <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex gap-4 p-2 bg-black/60 backdrop-blur-xl rounded-2xl border border-white/10 z-30">
+            <button 
+              onClick={() => handleLayerChange('optical')}
+              className={`flex flex-col items-center gap-1 p-3 rounded-xl transition-all w-24 ${activeLayer === 'optical' ? 'bg-white text-black shadow-[0_0_20px_rgba(255,255,255,0.3)]' : 'text-slate-400 hover:bg-white/10'}`}
+            >
+              <Eye size={20} />
+              <span className="text-[10px] font-bold uppercase tracking-wider">Optical</span>
+            </button>
+            <button 
+              onClick={() => handleLayerChange('infrared')}
+              className={`flex flex-col items-center gap-1 p-3 rounded-xl transition-all w-24 ${activeLayer === 'infrared' ? 'bg-red-500 text-white shadow-[0_0_20px_rgba(239,68,68,0.4)]' : 'text-slate-400 hover:bg-white/10'}`}
+            >
+              <Flame size={20} />
+              <span className="text-[10px] font-bold uppercase tracking-wider">Infrared</span>
+            </button>
+            <button 
+              onClick={() => handleLayerChange('xray')}
+              className={`flex flex-col items-center gap-1 p-3 rounded-xl transition-all w-24 ${activeLayer === 'xray' ? 'bg-blue-500 text-white shadow-[0_0_20px_rgba(59,130,246,0.4)]' : 'text-slate-400 hover:bg-white/10'}`}
+            >
+              <Zap size={20} />
+              <span className="text-[10px] font-bold uppercase tracking-wider">X-Ray</span>
+            </button>
+          </div>
         </div>
 
-        {/* RIGHT COLUMN: DATA (Scrollable) */}
-        <div className="w-full md:w-1/2 h-1/2 md:h-full p-8 overflow-y-auto custom-scrollbar">
-          <div className="space-y-8">
+        {/* --- RIGHT COLUMN: DATA ANALYTICS --- */}
+        <div className="w-full md:w-1/2 h-1/2 md:h-full p-8 overflow-y-auto custom-scrollbar relative">
+          
+          {/* Background Grid Pattern */}
+          <div className={`absolute inset-0 pointer-events-none opacity-[0.03] ${isDarkMode ? 'bg-[radial-gradient(#fff_1px,transparent_1px)] [background-size:16px_16px]' : 'bg-[radial-gradient(#000_1px,transparent_1px)] [background-size:16px_16px]'}`} />
+
+          <div className="relative space-y-8">
             
             {/* Description Box */}
-            <div className="p-6 rounded-2xl bg-white/5 border border-white/5">
-              <p className="text-lg leading-relaxed text-slate-300 font-light">"{body.description}"</p>
+            <div className={`p-6 rounded-2xl border ${isDarkMode ? 'bg-white/5 border-white/5' : 'bg-slate-50 border-slate-200'}`}>
+              <h3 className="text-xs font-bold uppercase text-slate-500 mb-3 flex items-center gap-2">
+                <ScanLine size={14} /> Object Classification
+              </h3>
+              <p className={`text-lg leading-relaxed font-light ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>
+                "{body.description}"
+              </p>
             </div>
 
             {/* Stats Grid */}
             <div className="grid grid-cols-2 gap-4">
-              <div className="p-4 rounded-xl bg-white/5 border border-white/5">
+              <div className={`p-4 rounded-xl border ${isDarkMode ? 'bg-white/5 border-white/5' : 'bg-white border-slate-100 shadow-sm'}`}>
                 <p className="text-[10px] text-slate-500 uppercase font-bold mb-1">Surface Temp</p>
                 <p className="text-2xl font-mono text-orange-400">{body.temp}</p>
               </div>
-              <div className="p-4 rounded-xl bg-white/5 border border-white/5">
+              <div className={`p-4 rounded-xl border ${isDarkMode ? 'bg-white/5 border-white/5' : 'bg-white border-slate-100 shadow-sm'}`}>
                 <p className="text-[10px] text-slate-500 uppercase font-bold mb-1">Solar Mass</p>
                 <p className="text-2xl font-mono text-cyan-400">{body.mass}</p>
               </div>
-              <div className="p-4 rounded-xl bg-white/5 border border-white/5">
+              <div className={`p-4 rounded-xl border ${isDarkMode ? 'bg-white/5 border-white/5' : 'bg-white border-slate-100 shadow-sm'}`}>
                 <p className="text-[10px] text-slate-500 uppercase font-bold mb-1">Radius (Rel)</p>
                 <p className="text-2xl font-mono text-purple-400">{body.size_rel} R☉</p>
               </div>
-              <div className="p-4 rounded-xl bg-white/5 border border-white/5">
-                <p className="text-[10px] text-slate-500 uppercase font-bold mb-1">Sector</p>
-                <p className="text-2xl font-mono text-emerald-400">{body.location.split(' ')[1]}</p>
+              <div className={`p-4 rounded-xl border ${isDarkMode ? 'bg-white/5 border-white/5' : 'bg-white border-slate-100 shadow-sm'}`}>
+                <p className="text-[10px] text-slate-500 uppercase font-bold mb-1">Distance</p>
+                <p className="text-2xl font-mono text-emerald-400">{body.distance}</p>
               </div>
             </div>
 
-            {/* Chart */}
+            {/* Spectral Chart */}
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-bold uppercase tracking-widest text-slate-400 flex items-center gap-2">
                   <Activity size={16} className="text-purple-500" />
-                  Spectral Fingerprint
+                  Emission Spectroscopy
                 </h3>
+                <span className="text-[10px] font-mono text-slate-500 bg-slate-800 px-2 py-1 rounded">
+                  Src: {activeLayer === 'optical' ? 'HST' : activeLayer === 'infrared' ? 'JWST' : 'Chandra'}
+                </span>
               </div>
-              <div className="h-[200px] w-full p-4 rounded-2xl border bg-black/20 border-white/5">
+              <div className={`h-[240px] w-full p-4 rounded-2xl border ${isDarkMode ? 'bg-black/40 border-white/5' : 'bg-slate-50 border-slate-200'}`}>
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={spectralData}>
                     <defs>
@@ -88,14 +183,33 @@ export const ComparisonModal = ({ body, isDarkMode, onClose }: Props) => {
                         <stop offset="95%" stopColor={body.color} stopOpacity={0}/>
                       </linearGradient>
                     </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
-                    <XAxis dataKey="wl" stroke="#64748b" fontSize={10} />
-                    <Tooltip contentStyle={{ backgroundColor: '#000', border: '1px solid #333' }} />
-                    <Area type="monotone" dataKey="intensity" stroke={body.color} strokeWidth={2} fill="url(#colorInt)" />
+                    <CartesianGrid strokeDasharray="3 3" stroke={isDarkMode ? "#334155" : "#e2e8f0"} vertical={false} />
+                    <XAxis dataKey="wl" stroke="#64748b" fontSize={10} tickFormatter={(val) => `${val}nm`} />
+                    <Tooltip 
+                      contentStyle={{ 
+                        backgroundColor: isDarkMode ? '#000' : '#fff', 
+                        border: '1px solid #333',
+                        borderRadius: '8px',
+                        color: isDarkMode ? '#fff' : '#000'
+                      }} 
+                    />
+                    <Area 
+                      type="monotone" 
+                      dataKey="intensity" 
+                      stroke={body.color} 
+                      strokeWidth={3} 
+                      fill="url(#colorInt)" 
+                      animationDuration={1500}
+                    />
                   </AreaChart>
                 </ResponsiveContainer>
               </div>
             </div>
+
+            {/* Download/Export Action */}
+            <button className="w-full py-4 rounded-xl border border-dashed border-slate-600 text-slate-500 hover:border-cyan-500 hover:text-cyan-400 hover:bg-cyan-500/5 transition-all text-xs font-bold uppercase tracking-widest flex items-center justify-center gap-2">
+              <ScanLine size={16} /> Export {activeLayer} dataset (.FITS)
+            </button>
 
           </div>
         </div>
