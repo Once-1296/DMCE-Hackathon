@@ -1,147 +1,265 @@
-import { useState, useMemo } from 'react';
-import { Maximize, ZoomIn, ZoomOut, Crosshair, Map } from 'lucide-react';
+import { useState, useRef, useMemo, useEffect } from 'react';
+import { Maximize, ZoomIn, ZoomOut, Move, Compass, Loader2, Sparkles } from 'lucide-react';
 import type { CelestialBody } from '../types';
 
 interface Props {
   data: CelestialBody[];
   onSelect: (body: CelestialBody) => void;
+  isDarkMode: boolean;
 }
 
-export const SkyMapView = ({ data, onSelect }: Props) => {
-  const [zoom, setZoom] = useState(1);
-  const [hoveredStar, setHoveredStar] = useState<(CelestialBody & { x: number; y: number }) | null>(null);
+// --- UTILITY: SEEDED RANDOM GENERATOR ---
+// This ensures the stars are random BUT stay in the same place every time you load the app.
+// We avoid "grouping" by using a high-quality pseudo-random algorithm.
+const mulberry32 = (a: number) => {
+  return function() {
+    var t = a += 0x6D2B79F5;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  }
+}
 
-  // Filter only stars that have valid coordinates for the map
-  const mapData = useMemo(() => {
-    return data.map(star => {
-      // Simulate mapping Mock Data RA/Dec to percentages
-      // Real RA is 0-360, Real Dec is -90 to +90
-      // We use random fallbacks if the mock string is complex
-      const raRaw = parseFloat(star.location.replace(/[^0-9.]/g, '')) || Math.random() * 360;
-      const decRaw = parseFloat(star.size_rel.toString()) || Math.random() * 90;
-      
-      return {
-        ...star,
-        x: (raRaw % 100), // Simplified mapping for demo 0-100%
-        y: (decRaw % 100)
-      };
+// --- VISUAL ASSETS ---
+const GALAXY_SVG = (color: string) => (
+  <svg viewBox="0 0 100 100" className="w-full h-full animate-spin-slow opacity-90">
+    <defs>
+      <radialGradient id={`grad-${color}`} cx="50%" cy="50%" r="50%" fx="50%" fy="50%">
+        <stop offset="0%" stopColor="white" stopOpacity="1" />
+        <stop offset="100%" stopColor={color} stopOpacity="0" />
+      </radialGradient>
+    </defs>
+    <path d="M50 50 m-45 0 a 45 45 0 1 0 90 0 a 45 45 0 1 0 -90 0" fill="none" stroke={`url(#grad-${color})`} strokeWidth="0.5" strokeDasharray="4 4" opacity="0.3"/>
+    <path d="M50 50 m-30 0 a 30 30 0 1 1 60 0 a 30 30 0 1 1 -60 0" fill="none" stroke={color} strokeWidth="2" strokeDasharray="10 20" />
+    <circle cx="50" cy="50" r="8" fill="white" className="blur-[2px]" />
+  </svg>
+);
+
+export const SkyMapView = ({ data, onSelect, isDarkMode }: Props) => {
+  // --- STATE ---
+  // Start at a very low scale (0.08) to see the WHOLE map initially
+  const [scale, setScale] = useState(0.08); 
+  const [position, setPosition] = useState({ x: 0, y: 0 });
+  
+  // Dragging State
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  
+  // System State
+  const [isReady, setIsReady] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // --- ENGINE: GENERATE THE UNIVERSE ---
+  // We map the data onto a massive 100,000px x 80,000px canvas
+  const universe = useMemo(() => {
+    // Initialize our seeded random generator
+    const seed = 12345; // Fixed seed = consistent universe
+    const rand = mulberry32(seed);
+
+    const CANVAS_WIDTH = 60000;
+    const CANVAS_HEIGHT = 40000;
+
+    return data.map((star) => {
+      // Generate truly random positions using the seeded generator
+      // We subtract half width/height to center the universe at (0,0)
+      const x = (rand() * CANVAS_WIDTH) - (CANVAS_WIDTH / 2);
+      const y = (rand() * CANVAS_HEIGHT) - (CANVAS_HEIGHT / 2);
+
+      // Determine visual identity based on data attributes
+      let visualType = 'star';
+      if (star.size_rel > 150) visualType = 'galaxy';
+      else if (star.temp.includes('2,') || star.size_rel < 0.8) visualType = 'planet';
+
+      return { ...star, x, y, visualType };
     });
   }, [data]);
 
+  // Generate filler stars (background noise) just once
+  const backgroundStars = useMemo(() => {
+    const rand = mulberry32(9999); // Different seed for background
+    return Array.from({ length: 2000 }).map((_, i) => ({
+      id: `bg-${i}`,
+      x: (rand() * 80000) - 40000,
+      y: (rand() * 60000) - 30000,
+      size: rand() * 3,
+      opacity: rand() * 0.4
+    }));
+  }, []);
+
+  useEffect(() => {
+    // Quick boot sequence
+    const timer = setTimeout(() => setIsReady(true), 100);
+    return () => clearTimeout(timer);
+  }, []);
+
+  // --- CONTROLS: MOUSE & ZOOM PHYSICS ---
+  
+  const handleMouseDown = (e: React.MouseEvent) => {
+    setIsDragging(true);
+    setDragStart({ x: e.clientX - position.x, y: e.clientY - position.y });
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isDragging) return;
+    e.preventDefault();
+    setPosition({ x: e.clientX - dragStart.x, y: e.clientY - dragStart.y });
+  };
+
+  const handleMouseUp = () => setIsDragging(false);
+
+  const handleWheel = (e: React.WheelEvent) => {
+    // Smoother Zoom Logic
+    const zoomSensitivity = 0.001; 
+    const delta = -e.deltaY * zoomSensitivity * scale; // Scale factor makes zoom faster when zoomed out
+    
+    // Limits: 0.02 (See Galaxy) to 4.0 (See Planet Surface)
+    const newScale = Math.min(Math.max(0.02, scale + delta), 4);
+    setScale(newScale);
+  };
+
   return (
-    <div className="h-[calc(100vh-140px)] flex flex-col animate-fade-in relative">
+    <div className={`relative h-[calc(100vh-140px)] w-full rounded-3xl overflow-hidden border shadow-2xl transition-colors select-none ${isDarkMode ? 'bg-[#000000] border-slate-800' : 'bg-[#02040a] border-slate-700'}`}>
       
-      {/* TOOLBAR */}
-      <div className="absolute top-4 left-4 z-20 flex flex-col gap-2">
-        <div className="bg-black/80 backdrop-blur-md border border-white/20 p-2 rounded-lg flex flex-col gap-2">
-          <button 
-            onClick={() => setZoom(z => Math.min(z + 0.5, 4))}
-            className="p-2 hover:bg-white/10 rounded text-cyan-400 transition-colors"
-            title="Zoom In"
-          >
-            <ZoomIn size={20} />
-          </button>
-          <button 
-            onClick={() => setZoom(z => Math.max(z - 0.5, 1))}
-            className="p-2 hover:bg-white/10 rounded text-slate-400 hover:text-white transition-colors"
-            title="Zoom Out"
-          >
-            <ZoomOut size={20} />
-          </button>
-          <div className="h-px bg-white/20 my-1"></div>
-          <button 
-            onClick={() => setZoom(1)}
-            className="p-2 hover:bg-white/10 rounded text-slate-400 hover:text-white transition-colors"
-            title="Reset View"
-          >
-            <Maximize size={20} />
-          </button>
+      {/* LOADING OVERLAY */}
+      {!isReady && (
+        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black">
+          <Loader2 className="animate-spin text-cyan-500 mb-4" size={40} />
+          <p className="text-cyan-500 font-mono text-sm tracking-[0.2em] animate-pulse">BOOTING NAV-SYSTEM...</p>
+        </div>
+      )}
+
+      {/* --- HUD CONTROLS --- */}
+      <div className="absolute top-6 left-6 z-20 flex flex-col gap-2">
+        <div className="bg-black/90 backdrop-blur-xl border border-white/10 p-2 rounded-xl flex flex-col shadow-2xl">
+          <button onClick={() => setScale(s => Math.min(s * 1.5, 4))} className="p-3 hover:bg-white/10 rounded-lg text-cyan-400 active:scale-95 transition-all"><ZoomIn size={20} /></button>
+          <button onClick={() => setScale(s => Math.max(s / 1.5, 0.02))} className="p-3 hover:bg-white/10 rounded-lg text-slate-400 hover:text-white active:scale-95 transition-all"><ZoomOut size={20} /></button>
+          <div className="h-px bg-white/10 my-1"></div>
+          <button onClick={() => { setPosition({x:0,y:0}); setScale(0.08); }} className="p-3 hover:bg-white/10 rounded-lg text-white active:scale-95 transition-all" title="Reset Universe"><Maximize size={20} /></button>
         </div>
       </div>
 
-      {/* INFO PANEL (Top Right) */}
-      <div className="absolute top-4 right-4 z-20 bg-black/80 backdrop-blur-md border border-white/20 px-4 py-2 rounded-full flex items-center gap-3">
-         <div className="flex items-center gap-2">
-           <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></div>
-           <span className="text-xs font-mono text-slate-300">LIVE FEED: TESS SECTOR 4</span>
-         </div>
-         <div className="h-4 w-px bg-white/20"></div>
-         <span className="text-xs font-mono text-cyan-400">{data.length} OBJECTS</span>
+      {/* --- HUD INFO --- */}
+      <div className="absolute bottom-6 left-6 z-20 pointer-events-none">
+         <h1 className="text-4xl font-black text-white/10 tracking-tighter select-none">SECTOR 7G</h1>
       </div>
 
-      {/* THE MAP CANVAS */}
-      <div className="flex-1 bg-[#050505] relative overflow-hidden rounded-3xl border border-white/10 cursor-crosshair group">
+      <div className="absolute top-6 right-6 z-20 pointer-events-none">
+        <div className="bg-black/80 backdrop-blur-md border border-white/10 px-4 py-2 rounded-full flex items-center gap-4 text-[10px] font-mono tracking-widest uppercase">
+           <span className="text-slate-400 flex items-center gap-2"><Move size={10} /> POS: {Math.round(position.x)},{Math.round(position.y)}</span>
+           <span className="w-px h-3 bg-white/20"></span>
+           <span className={scale > 1 ? "text-red-400" : "text-cyan-400"}>ZOOM: {(scale * 100).toFixed(1)}%</span>
+        </div>
+      </div>
+
+      {/* --- THE INFINITE CANVAS --- */}
+      <div 
+        ref={containerRef}
+        className="w-full h-full cursor-move relative overflow-hidden bg-black"
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseUp}
+        onWheel={handleWheel}
+        style={{ cursor: isDragging ? 'grabbing' : 'grab' }}
+      >
         
-        {/* GRID LINES (Scientific Overlay) */}
-        <div className="absolute inset-0 opacity-20 pointer-events-none" 
-          style={{ 
-            backgroundImage: `linear-gradient(#333 1px, transparent 1px), linear-gradient(90deg, #333 1px, transparent 1px)`,
-            backgroundSize: `${100 * zoom}px ${100 * zoom}px`,
-            transform: `scale(${zoom})`,
-            transformOrigin: 'center center'
-          }}
-        ></div>
-
-        {/* Central Axis Lines */}
-        <div className="absolute top-1/2 left-0 w-full h-px bg-cyan-500/30 pointer-events-none"></div>
-        <div className="absolute left-1/2 top-0 h-full w-px bg-cyan-500/30 pointer-events-none"></div>
-
-        {/* THE STARS */}
+        {/* PARALLAX GRID (Moves slightly slower for depth) */}
         <div 
-          className="absolute inset-0 transition-transform duration-500 ease-out"
-          style={{ transform: `scale(${zoom})` }}
+           className="absolute inset-0 pointer-events-none opacity-20"
+           style={{ 
+             backgroundImage: 'radial-gradient(#333 1px, transparent 1px)',
+             backgroundSize: `${100 * scale}px ${100 * scale}px`,
+             backgroundPosition: `${position.x}px ${position.y}px`
+           }}
+        />
+
+        {/* --- VIEWPORT CONTAINER --- */}
+        {/* This div applies the Pan/Zoom Transform to everything inside */}
+        <div 
+          className="absolute left-1/2 top-1/2 w-0 h-0 will-change-transform transform-gpu"
+          style={{ 
+            transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`
+          }}
         >
-          {mapData.map((star, i) => (
-            <button
-              key={i}
-              onClick={() => onSelect(star)}
-              onMouseEnter={() => setHoveredStar(star)}
-              onMouseLeave={() => setHoveredStar(null)}
-              className="absolute rounded-full transform -translate-x-1/2 -translate-y-1/2 hover:z-50 focus:outline-none transition-all duration-300 hover:scale-[5]"
-              style={{
-                left: `${star.x}%`,
-                top: `${star.y}%`,
-                width: `${Math.max(2, star.size_rel / 200)}px`, // Size based on real relative size
-                height: `${Math.max(2, star.size_rel / 200)}px`,
-                backgroundColor: star.color,
-                boxShadow: `0 0 ${star.size_rel / 50}px ${star.color}`
-              }}
-            >
-              {/* Target Reticle (Only appears on hover) */}
-              <div className="absolute -inset-4 border border-cyan-500/50 rounded-full opacity-0 hover:opacity-100 scale-0 hover:scale-100 transition-all duration-300"></div>
-            </button>
-          ))}
-        </div>
 
-        {/* HOVER TOOLTIP (Follows Mouse or Fixed Position) */}
-        {hoveredStar && (
-          <div 
-            className="absolute z-50 pointer-events-none bg-black/90 border border-cyan-500/30 p-3 rounded-lg backdrop-blur-xl"
-            style={{ 
-              left: `${hoveredStar.x}%`, 
-              top: `${hoveredStar.y}%`,
-              transform: `translate(20px, -20px)` // Offset slightly from the star
-            }}
-          >
-            <h4 className="font-bold text-white text-sm">{hoveredStar.name}</h4>
-            <div className="flex items-center gap-2 mt-1">
-              <span className="text-[10px] bg-white/10 px-1 rounded text-cyan-300">{hoveredStar.type}</span>
-              <span className="text-[10px] text-slate-400">{hoveredStar.temp}</span>
-            </div>
-          </div>
-        )}
-        
-      </div>
+            {/* 1. BACKGROUND STARS (Static Filler) */}
+            {isReady && backgroundStars.map((star) => (
+               <div 
+                  key={star.id}
+                  className="absolute bg-white rounded-full pointer-events-none"
+                  style={{
+                    left: star.x,
+                    top: star.y,
+                    width: `${star.size * 5}px`, // Make them big enough to see when zoomed out
+                    height: `${star.size * 5}px`,
+                    opacity: star.opacity
+                  }}
+               />
+            ))}
 
-      {/* FOOTER LEGEND */}
-      <div className="mt-4 flex justify-between items-center text-xs text-slate-500 font-mono">
-        <div className="flex gap-4">
-          <span className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-blue-400 shadow-[0_0_5px_blue]"></div> HOT (O/B)</span>
-          <span className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-yellow-400 shadow-[0_0_5px_yellow]"></div> AVG (G/F)</span>
-          <span className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-red-500 shadow-[0_0_5px_red]"></div> COOL (M/K)</span>
-        </div>
-        <div>
-          PROJECTION: AITOFF-HAMMER [ICRS J2000]
+            {/* 2. MAIN DATA OBJECTS */}
+            {isReady && universe.map((obj) => {
+              // --- DYNAMIC LOD CALCULATION ---
+              // Determine size based on zoom to keep them visible at 0 zoom
+              // At low zoom (scale < 0.1), size is fixed so they don't disappear
+              const displaySize = scale < 0.1 
+                ? (obj.visualType === 'galaxy' ? 400 : 150) // Giant dots when zoomed out
+                : (obj.visualType === 'galaxy' ? 80 : Math.max(10, obj.size_rel * 2)); // Normal size when zoomed in
+
+              return (
+                <div
+                  key={obj.id}
+                  onClick={(e) => { e.stopPropagation(); onSelect(obj); }}
+                  className="absolute flex flex-col items-center justify-center group hover:z-[100] cursor-pointer"
+                  style={{
+                    transform: `translate(${obj.x}px, ${obj.y}px)`,
+                  }}
+                >
+                  
+                  {/* GRAPHIC RENDERER */}
+                  <div 
+                     className="transition-transform duration-300 hover:scale-[2]"
+                     style={{
+                       width: `${displaySize}px`,
+                       height: `${displaySize}px`,
+                     }}
+                  >
+                     {obj.visualType === 'galaxy' ? (
+                       GALAXY_SVG(obj.color)
+                     ) : obj.visualType === 'planet' ? (
+                       <div className="w-full h-full rounded-full border-2 border-white/20 relative" style={{background: obj.color}}>
+                          <div className="absolute inset-0 rounded-full bg-gradient-to-tr from-black/60 to-transparent"></div>
+                       </div>
+                     ) : (
+                       // Standard Star
+                       <div className="relative w-full h-full flex items-center justify-center">
+                          {/* Glow (Visible at distance) */}
+                          <div className="absolute inset-0 rounded-full blur-xl opacity-50" style={{backgroundColor: obj.color}}></div>
+                          {/* Core */}
+                          <div className="w-[40%] h-[40%] rounded-full bg-white shadow-[0_0_20px_white]"></div>
+                       </div>
+                     )}
+                  </div>
+
+                  {/* LABEL (Only visible when Scale > 0.4) */}
+                  <div className={`mt-4 pointer-events-none transition-all duration-300 flex flex-col items-center 
+                    ${scale > 0.4 ? 'opacity-100 scale-100' : 'opacity-0 scale-50 group-hover:opacity-100 group-hover:scale-100'}`}>
+                    
+                    <span className="text-[20px] font-black text-white whitespace-nowrap drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
+                      {obj.name}
+                    </span>
+                    
+                    {scale > 1.0 && (
+                      <span className="text-[10px] font-mono text-cyan-300 bg-black/50 px-2 rounded border border-cyan-500/30 mt-1">
+                        {obj.distance} • {obj.temp}
+                      </span>
+                    )}
+                  </div>
+
+                </div>
+              );
+            })}
+
         </div>
       </div>
     </div>

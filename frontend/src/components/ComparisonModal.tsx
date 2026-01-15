@@ -209,6 +209,8 @@ export const ComparisonModal = ({ body, isDarkMode, onClose }: Props) => {
               </div>
             </div>
 
+            
+
              <div className="lg:col-span-3">
          <FusionHarmonizer data={body} isDarkMode={isDarkMode} />
       </div>
