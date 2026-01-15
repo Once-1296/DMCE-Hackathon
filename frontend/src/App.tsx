@@ -13,6 +13,8 @@ import { AIInsights } from './components/AIInsights';
 import { MissionControl } from './components/MissionControl';
 
 // Data & Types
+// Note: Using 'import type' ensures these are stripped out during compilation, 
+// preventing "value never used" errors in some bundlers.
 import { generateCosmicData } from './utils/mockDataGenerator';
 import type { CelestialBody, FusionResponse, View } from './types';
 
